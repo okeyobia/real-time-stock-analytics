@@ -1,6 +1,24 @@
 #!/bin/bash
 set -e
 
-echo "No tests configured for this project yet."
-echo "To add tests, create a 'tests' directory and add your test files."
-echo "Then, you can add commands to this script to run your tests."
+# --- Producer Tests ---
+echo "--- Running Producer Tests ---"
+cd services/producer
+# Install dependencies, including test dependencies
+pip install -r requirements.txt
+# Run tests
+pytest
+# Cleanup
+cd ../..
+
+# --- Processor Tests ---
+echo "--- Running Processor Tests ---"
+cd services/processor
+# Install dependencies, including test dependencies
+pip install -r requirements.txt
+# Run tests
+pytest
+# Cleanup
+cd ../..
+
+echo "All tests passed successfully!"

@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Terraform
+.terraform/
+*.tfplan
+*.tfstate
+*.tfstate.backup
+crash.log
+*.override.tf
+*.override.tf.json
+*.terraformrc
+terraform.rc
+.terraform.lock.hcl
+
+# AWS Lambda packaging
+services/*/dist/
+services/producer/producer.zip
+services/processor/processor.zip
+
+# IDEs
+.idea/
+.vscode/
+
+# OS specific
+.DS_Store
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
