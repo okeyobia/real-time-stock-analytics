@@ -11,6 +11,7 @@ variable "kinesis_arn" {
 }
 
 variable "dynamodb_table" {
+  description = "DynamoDB table name for processed stock data"
   type = string
 }
 
@@ -19,6 +20,7 @@ variable "dynamodb_arn" {
 }
 
 variable "s3_bucket" {
+  description = "S3 bucket for raw historical stock data"
   type = string
 }
 
@@ -46,4 +48,9 @@ variable "stock_symbols" {
   description = "Comma-separated list of stock symbols"
   type        = string
 }
+
+variable "stock_api_secret_arn" {
+  type = string
+}
+
 

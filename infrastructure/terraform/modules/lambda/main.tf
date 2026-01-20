@@ -1,5 +1,6 @@
 resource "aws_lambda_function" "this" {
   function_name = var.function_name
+  publish = true
   runtime       = "python3.11"
   handler       = "app.handler"
   role          = aws_iam_role.lambda_role.arn
@@ -14,6 +15,7 @@ resource "aws_lambda_function" "this" {
       KINESIS_STREAM_NAME = var.kinesis_stream_name
       STOCK_API_KEY       = var.stock_api_key
       STOCK_SYMBOLS       = var.stock_symbols
+      STOCK_API_SECRET_ARN = var.stock_api_secret_arn
     }
   }
 
