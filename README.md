@@ -197,7 +197,7 @@ CloudWatch provides metrics, structured logs, and alarms, while an SQS DLQ ensur
 │       └── requirements.txt
 │
 ├── athena/
-│   └── stock_market_table.sql
+│   └── sample_querry.sql
 │
 └── README.md
 ```
