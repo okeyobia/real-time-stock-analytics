@@ -11,6 +11,9 @@ resource "aws_lambda_function" "this" {
     variables = {
       DYNAMODB_TABLE = var.dynamodb_table
       S3_BUCKET      = var.s3_bucket
+      KINESIS_STREAM_NAME = var.kinesis_stream_name
+      STOCK_API_KEY       = var.stock_api_key
+      STOCK_SYMBOLS       = var.stock_symbols
     }
   }
 

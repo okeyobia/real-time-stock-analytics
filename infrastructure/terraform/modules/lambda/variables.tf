@@ -30,3 +30,20 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "kinesis_stream_name" {
+  description = "Kinesis stream name used by the producer"
+  type        = string
+}
+
+variable "stock_api_key" {
+  description = "API key for the stock data provider"
+  type        = string
+  sensitive   = true
+}
+
+variable "stock_symbols" {
+  description = "Comma-separated list of stock symbols"
+  type        = string
+}
+
