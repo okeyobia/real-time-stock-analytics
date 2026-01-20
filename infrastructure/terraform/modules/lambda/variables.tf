@@ -53,4 +53,11 @@ variable "stock_api_secret_arn" {
   type = string
 }
 
+variable "lambda_alias" {
+  description = "Lambda alias name"
+  type        = string
+  default     = "live"
+}
+
+
 

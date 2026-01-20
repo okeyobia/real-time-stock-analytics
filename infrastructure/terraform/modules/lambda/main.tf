@@ -28,3 +28,10 @@ resource "aws_lambda_event_source_mapping" "kinesis" {
   starting_position = "LATEST"
   batch_size        = 100
 }
+
+resource "aws_lambda_alias" "live" {
+  name             = var.lambda_alias
+  function_name    = aws_lambda_function.this.function_name
+  function_version = aws_lambda_function.this.version
+}
+
