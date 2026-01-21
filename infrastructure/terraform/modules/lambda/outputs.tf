@@ -17,3 +17,18 @@ output "role_arn" {
   description = "ARN of the IAM role"
   value       = aws_iam_role.lambda_role.arn
 }
+
+output "dlq_arn" {
+  description = "ARN of the DLQ"
+  value       = aws_sqs_queue.dlq.arn
+}
+
+output "dlq_url" {
+  description = "URL of the DLQ"
+  value       = aws_sqs_queue.dlq.url
+}
+
+output "log_group_name" {
+  description = "Name of the CloudWatch Log Group"
+  value       = aws_cloudwatch_log_group.lambda_log_group.name
+}

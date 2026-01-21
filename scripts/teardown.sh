@@ -9,3 +9,5 @@ echo "Destroying Terraform-managed infrastructure..."
 terraform destroy -auto-approve
 
 echo "Teardown completed successfully!"
+
+aws secretsmanager delete-secret --secret-id stock-api-key-dev --force-delete-without-recovery

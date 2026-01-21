@@ -23,19 +23,34 @@ resource "aws_iam_policy" "lambda_policy" {
           "kinesis:GetRecords",
           "kinesis:GetShardIterator",
           "kinesis:DescribeStream",
-          "kinesis:ListStreams"
+          "kinesis:ListStreams",
+          "kinesis:PutRecord",
+          "kinesis:PutRecords"
         ]
         Resource = var.kinesis_arn
       },
       {
         Effect   = "Allow"
-        Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
+        Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query"]
         Resource = var.dynamodb_arn
       },
       {
         Effect   = "Allow"
-        Action   = ["s3:PutObject"]
+        Action   = ["s3:PutObject", "s3:GetObject"]
         Resource = "${var.s3_bucket_arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.stock_api_secret_arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = [
+          "sqs:SendMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = aws_sqs_queue.dlq.arn
       },
       {
         Effect   = "Allow"
@@ -44,12 +59,7 @@ resource "aws_iam_policy" "lambda_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = var.stock_api_secret_arn
+        Resource = "arn:aws:logs:*:*:*"
       }
     ]
   })

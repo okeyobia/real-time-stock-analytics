@@ -1,137 +1,243 @@
+import base64
 import json
 import logging
 import os
-import random
-import time
-from typing import Dict, List
+from collections import defaultdict, deque
+from datetime import datetime
+from typing import Dict, Any, List, Optional
 
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
+from pythonjsonlogger import jsonlogger
 
-# ----------------------------
+# =====================================================
 # Configuration
-# ----------------------------
-KINESIS_STREAM_NAME = os.getenv("KINESIS_STREAM_NAME", "stock-stream")
-STOCK_API_KEY = os.getenv("STOCK_API_KEY", "mock-api-key")
-STOCK_SYMBOLS = os.getenv("STOCK_SYMBOLS", "AAPL,MSFT,GOOGL").split(",")
+# =====================================================
+DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
+S3_BUCKET = os.environ["S3_BUCKET"]
+SECRET_NAME = os.environ.get("SECRET_NAME", "stock-api-key-dev")
 
-MAX_RETRIES = 3
-RETRY_BACKOFF_SECONDS = 2
+MOVING_AVG_WINDOW = 5
 
-# ----------------------------
-# Logging
-# ----------------------------
+# =====================================================
+# Logging (Structured)
+# =====================================================
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# ----------------------------
+# Clear any existing handlers
+if logger.handlers:
+    for handler in logger.handlers:
+        logger.removeHandler(handler)
+
+logHandler = logging.StreamHandler()
+formatter = jsonlogger.JsonFormatter()
+logHandler.setFormatter(formatter)
+logger.addHandler(logHandler)
+
+
+def log(message: str, level: str = "info", **kwargs):
+    """Structured logging helper"""
+    log_data = {"message": message, **kwargs}
+    
+    if level == "error":
+        logger.error(log_data)
+    elif level == "warning":
+        logger.warning(log_data)
+    else:
+        logger.info(log_data)
+
+
+# =====================================================
 # AWS Clients
-# ----------------------------
-kinesis_client = boto3.client("kinesis")
+# =====================================================
+dynamodb = boto3.resource("dynamodb")
+table = dynamodb.Table(DYNAMODB_TABLE)
 
-# ----------------------------
-# Mock / API Fetch
-# ----------------------------
-def fetch_stock_price(symbol: str) -> Dict:
-    """
-    Fetch stock price data from a public API.
-    This implementation mocks the response to keep the Lambda testable
-    and free-tier friendly.
-    """
-    # Simulated API latency
-    time.sleep(0.1)
+s3 = boto3.client("s3")
+secrets_manager = boto3.client("secretsmanager")
 
-    # Mocked response (replace with real API if desired)
-    return {
-        "symbol": symbol,
-        "price": round(random.uniform(100, 500), 2),
-        "volume": random.randint(1_000, 5_000_000),
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    }
+# =====================================================
+# Secrets Management
+# =====================================================
+_secret_cache: Optional[Dict[str, Any]] = None
 
-# ----------------------------
-# Kinesis Publish
-# ----------------------------
-def put_record_to_kinesis(record: Dict) -> None:
-    """
-    Publish a single record to Kinesis with retries.
-    """
-    payload = json.dumps(record)
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            response = kinesis_client.put_record(
-                StreamName=KINESIS_STREAM_NAME,
-                Data=payload,
-                PartitionKey=record["symbol"]
-            )
+def get_secret() -> Dict[str, Any]:
+    """Retrieve and cache secrets from AWS Secrets Manager."""
+    global _secret_cache
+    
+    if _secret_cache is not None:
+        return _secret_cache
+    
+    try:
+        response = secrets_manager.get_secret_value(SecretId=SECRET_NAME)
+        
+        if "SecretString" in response:
+            _secret_cache = json.loads(response["SecretString"])
+        else:
+            _secret_cache = json.loads(base64.b64decode(response["SecretBinary"]))
+        
+        log("Secret retrieved successfully", secret_name=SECRET_NAME)
+        return _secret_cache
+        
+    except ClientError as err:
+        log("Failed to retrieve secret", level="error", error=str(err), 
+            error_type=type(err).__name__, secret_name=SECRET_NAME)
+        raise
 
-            logger.info(
-                "Successfully published record",
-                extra={
-                    "symbol": record["symbol"],
-                    "sequence_number": response["SequenceNumber"],
-                    "shard_id": response["ShardId"]
-                }
-            )
-            return
 
-        except (ClientError, BotoCoreError) as error:
-            logger.error(
-                "Failed to publish record",
-                extra={
-                    "symbol": record["symbol"],
-                    "attempt": attempt,
-                    "error": str(error)
-                }
-            )
+# =====================================================
+# In-memory state (warm Lambda only)
+# =====================================================
+price_cache: Dict[str, deque] = defaultdict(
+    lambda: deque(maxlen=MOVING_AVG_WINDOW)
+)
 
-            if attempt == MAX_RETRIES:
-                raise
 
-            time.sleep(RETRY_BACKOFF_SECONDS ** attempt)
+# =====================================================
+# Helpers
+# =====================================================
+def decode_kinesis_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    payload = base64.b64decode(record["kinesis"]["data"]).decode("utf-8")
+    return json.loads(payload)
 
-# ----------------------------
-# Lambda Handler
-# ----------------------------
+
+def calculate_moving_average(symbol: str, price: float) -> float:
+    prices = price_cache[symbol]
+    prices.append(price)
+    return round(sum(prices) / len(prices), 2)
+
+
+def write_to_dynamodb(item: Dict[str, Any]):
+    try:
+        table.put_item(Item=item)
+        log("DynamoDB write successful", 
+            symbol=item.get("symbol"), 
+            timestamp=item.get("timestamp"))
+    except Exception as err:
+        log("DynamoDB write failed", level="error", 
+            error=str(err), error_type=type(err).__name__)
+        raise
+
+
+def write_to_s3(raw_event: Dict[str, Any], event_time: datetime):
+    key = (
+        f"year={event_time.year}/"
+        f"month={event_time.month:02d}/"
+        f"day={event_time.day:02d}/"
+        f"{raw_event['symbol']}-{event_time.isoformat()}.json"
+    )
+
+    try:
+        s3.put_object(
+            Bucket=S3_BUCKET,
+            Key=key,
+            Body=json.dumps(raw_event).encode("utf-8"),
+            ContentType="application/json"
+        )
+        log("S3 write successful", 
+            bucket=S3_BUCKET, 
+            key=key, 
+            symbol=raw_event.get("symbol"))
+    except Exception as err:
+        log("S3 write failed", level="error", 
+            error=str(err), error_type=type(err).__name__, 
+            bucket=S3_BUCKET, key=key)
+        raise
+
+
+# =====================================================
+# Lambda Handler (Partial Batch Failure Enabled)
+# =====================================================
 def handler(event, context):
-    """
-    Lambda entry point.
-    Fetches stock prices and publishes them to Kinesis.
-    """
-    logger.info(
-        "Stock producer invocation started",
-        extra={"symbols": STOCK_SYMBOLS}
-    )
+    batch_failures: List[Dict[str, str]] = []
+    
+    log("Lambda invocation started", 
+        function="processor",
+        request_id=context.request_id,
+        event_records=len(event.get('Records', [])))
+    
+    # Load secrets on cold start
+    try:
+        secrets = get_secret()
+        log("Secrets loaded successfully", has_api_key=bool(secrets.get("api_key")))
+    except Exception as err:
+        log("Failed to load secrets - continuing without", level="warning",
+            error=str(err), error_type=type(err).__name__)
 
-    published = 0
-    failed = 0
+    successful_records = 0
+    failed_records = 0
 
-    for symbol in STOCK_SYMBOLS:
+    for record in event["Records"]:
+        record_id = record["eventID"]
+
         try:
-            stock_data = fetch_stock_price(symbol)
-            put_record_to_kinesis(stock_data)
-            published += 1
+            data = decode_kinesis_record(record)
 
-        except Exception as exc:
-            failed += 1
-            logger.exception(
-                "Unhandled error while processing symbol",
-                extra={"symbol": symbol, "error": str(exc)}
+            symbol = data["symbol"]
+            price = float(data["price"])
+            volume = int(data["volume"])
+            timestamp = data["timestamp"]
+
+            event_time = datetime.fromisoformat(
+                timestamp.replace("Z", "+00:00")
             )
 
-    logger.info(
-        "Stock producer invocation completed",
-        extra={
-            "published": published,
-            "failed": failed
-        }
-    )
+            moving_avg = calculate_moving_average(symbol, price)
+
+            processed_item = {
+                "symbol": symbol,
+                "timestamp": timestamp,
+                "price": price,
+                "volume": volume,
+                "moving_average": moving_avg
+            }
+
+            write_to_dynamodb(processed_item)
+            write_to_s3(data, event_time)
+
+            log("Record processed successfully",
+                symbol=symbol,
+                price=price,
+                volume=volume,
+                moving_average=moving_avg,
+                record_id=record_id)
+            
+            successful_records += 1
+
+        except (KeyError, ValueError) as err:
+            log("Invalid record format", level="error",
+                error=str(err),
+                error_type=type(err).__name__,
+                record_id=record_id)
+            batch_failures.append({"itemIdentifier": record_id})
+            failed_records += 1
+
+        except (ClientError, BotoCoreError) as err:
+            log("AWS service error", level="error",
+                error=str(err),
+                error_type=type(err).__name__,
+                record_id=record_id)
+            batch_failures.append({"itemIdentifier": record_id})
+            failed_records += 1
+
+        except Exception as err:
+            log("Unexpected error", level="error",
+                error=str(err),
+                error_type=type(err).__name__,
+                record_id=record_id,
+                exc_info=True)
+            batch_failures.append({"itemIdentifier": record_id})
+            failed_records += 1
+
+    log("Lambda invocation completed",
+        function="processor",
+        request_id=context.request_id,
+        total_records=len(event.get('Records', [])),
+        successful_records=successful_records,
+        failed_records=failed_records)
 
     return {
-        "statusCode": 200,
-        "body": json.dumps({
-            "published": published,
-            "failed": failed
-        })
+        "batchItemFailures": batch_failures
     }
