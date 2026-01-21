@@ -1,36 +1,45 @@
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/.terraform.tfstate.lock.info
+**/terraform.tfvars
+**/*.tfvars
+
+# Lambda packages
+*.zip
+**/layer/
+**/package/
+
 # Python
 __pycache__/
-*.pyc
-*.egg-info/
-.venv/
-venv/
-.env
-
-# Terraform
-.terraform/
-*.tfplan
-*.tfstate
-*.tfstate.backup
-crash.log
-*.override.tf
-*.override.tf.json
-*.terraformrc
-terraform.rc
-.terraform.lock.hcl
-
-# AWS Lambda packaging
-services/*/dist/
-services/producer/producer.zip
-services/processor/processor.zip
+*.py[cod]
+*~
+.Python
+*.so
+.pytest_cache/
+*.coverage
+.coverage.*
+htmlcov/
+*.log
 
 # IDEs
-.idea/
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# OS specific
+# OS
 .DS_Store
+Thumbs.db
 
-# Pytest
-.pytest_cache/
-.coverage
-htmlcov/
+# Environment
+.env
+.env.local
+*.pem
+*.key
+
+# AWS
+.aws/
