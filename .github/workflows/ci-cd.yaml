@@ -152,7 +152,7 @@ jobs:
           rm -rf layer
 
       - name: Upload Producer Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: producer-lambda
           path: |
@@ -161,7 +161,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Processor Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: processor-lambda
           path: |
@@ -192,13 +192,13 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Download Producer Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: producer-lambda
           path: services/producer
 
       - name: Download Processor Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: processor-lambda
           path: services/processor
