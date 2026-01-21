@@ -60,4 +60,11 @@ variable "lambda_alias" {
 }
 
 
+variable "lambda_layer_zip" {
+  description = "Path to the Lambda layer zip file"
+  type        = string
+}
+
+
+
 

@@ -1,5 +1,3 @@
 boto3
-pandas
-pyarrow
-pytest
-moto
+requests
+python-json-logger

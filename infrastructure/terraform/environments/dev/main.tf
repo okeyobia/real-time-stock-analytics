@@ -5,12 +5,24 @@ module "kinesis" {
   retention_hours = 24
 }
 
+// ...existing code...
 module "dynamodb" {
   source     = "../../modules/dynamodb"
   table_name = var.dynamodb_table_name
+  ttl_attribute  = "ttl"
+  
+  tags = {
+    Environment = "dev"
+    Project     = "real-time-stock-analytics"
+  }
 }
 
-// ...existing code...
+
+module "stock_api_secret" {
+  source        = "../../modules/secrets"
+  secret_name   = "stock-api-key-dev"
+  secret_value  = var.stock_api_key
+}
 module "s3" {
   source      = "../../modules/s3"
   bucket_name = var.s3_bucket_name
@@ -20,12 +32,13 @@ module "s3" {
 module "lambda" {
   source            = "../../modules/lambda"
   function_name     = "stock-data-producer"
-  lambda_zip        = "../../../services/producer/lambda.zip"
+  lambda_zip        = "../../../../services/producer/lambda.zip"
+  lambda_layer_zip  = "../../../../services/producer/layer.zip"
 
   kinesis_stream_name = module.kinesis.stream_name
   stock_api_key       = var.stock_api_key
   stock_symbols       = "AAPL,MSFT,GOOGL"
-
+  stock_api_secret_arn = module.stock_api_secret.secret_arn
   kinesis_arn    = module.kinesis.stream_arn
   dynamodb_table = module.dynamodb.table_name
   dynamodb_arn   = module.dynamodb.table_arn
@@ -37,11 +50,13 @@ module "processor_lambda" {
   source = "../../modules/lambda"
 
   function_name = "stock-stream-processor"
-  lambda_zip    = "../../../services/processor/lambda.zip"
+  lambda_zip    = "../../../../services/processor/lambda.zip"
+  lambda_layer_zip  = "../../../../services/processor/layer.zip"
 
   kinesis_stream_name = module.kinesis.stream_name
   stock_api_key       = var.stock_api_key
   stock_symbols       = ""
+  stock_api_secret_arn = module.stock_api_secret.secret_arn
 
   kinesis_arn    = module.kinesis.stream_arn
   dynamodb_table = module.dynamodb.table_name
@@ -50,9 +65,5 @@ module "processor_lambda" {
   s3_bucket_arn  = module.s3.bucket_arn
 }
 
-module "stock_api_secret" {
-  source        = "../../modules/secrets"
-  secret_name   = "stock-api-key-dev"
-  secret_value  = var.stock_api_key
-}
+
 
