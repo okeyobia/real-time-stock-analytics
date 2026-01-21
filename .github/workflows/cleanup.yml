@@ -1,0 +1,44 @@
+name: Cleanup Old Resources
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    name: Clean Up Old Test Resources
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Clean up old S3 buckets
+        run: |
+          aws s3api list-buckets --query 'Buckets[?contains(Name, `stock-historical-data-dev`)].Name' --output text | \
+          while read bucket; do
+            creation_date=$(aws s3api head-bucket --bucket "$bucket" --query 'CreationDate' --output text 2>/dev/null || echo "")
+            if [ -n "$creation_date" ]; then
+              age_days=$(( ($(date +%s) - $(date -d "$creation_date" +%s)) / 86400 ))
+              if [ $age_days -gt 7 ]; then
+                echo "Deleting old bucket: $bucket (age: $age_days days)"
+                aws s3 rb s3://$bucket --force
+              fi
+            fi
+          done
+
+      - name: Clean up old Lambda versions
+        run: |
+          for function in stock-data-producer stock-stream-processor; do
+            aws lambda list-versions-by-function --function-name $function --query 'Versions[?Version!=`$LATEST`].Version' --output text | \
+            head -n -5 | \
+            while read version; do
+              echo "Deleting old version: $function:$version"
+              aws lambda delete-function --function-name $function --qualifier $version || true
+            done
+          done

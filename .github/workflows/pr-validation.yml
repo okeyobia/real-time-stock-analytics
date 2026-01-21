@@ -1,0 +1,41 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pr-checks:
+    name: PR Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify PR Title Convention
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          if ! echo "$PR_TITLE" | grep -qE "^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?: .+"; then
+            echo "❌ PR title must follow conventional commits format"
+            echo "Examples: feat: add new feature, fix(api): resolve bug"
+            exit 1
+          fi
+
+      - name: Check for Large Files
+        run: |
+          large_files=$(find . -type f -size +10M -not -path "./.git/*")
+          if [ -n "$large_files" ]; then
+            echo "❌ Large files detected (>10MB):"
+            echo "$large_files"
+            exit 1
+          fi
+
+      - name: Validate Branch Name
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          if ! echo "$BRANCH" | grep -qE "^(feature|bugfix|hotfix|release)/.+"; then
+            echo "⚠️  Branch name should follow: feature/*, bugfix/*, hotfix/*, or release/*"
+          fi
